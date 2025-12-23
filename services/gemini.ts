@@ -9,7 +9,7 @@ export const getAITutorResponse = async (userInput: string) => {
       }),
     });
 
-        const data = await response.json();
+    const data = await response.json();
     return data.text || "Sryun đang bận một chút, thử lại sau nhé!";
   } catch (error) {
     console.error("AI tutor error:", error);
@@ -17,35 +17,42 @@ export const getAITutorResponse = async (userInput: string) => {
   }
 };
 
-
-export const generateLessonPlan = async (topic: string, unit: string, duration: string, focus: string) => {
+export const generateLessonPlan = async (
+  topic: string,
+  unit: string,
+  duration: string,
+  focus: string
+) => {
   try {
-    const topicContext = topic.trim() ? `với chủ đề cụ thể là "${topic}"` : "dựa trên nội dung chuẩn của sách giáo khoa";
+    const topicContext = topic.trim()
+      ? `với chủ đề cụ thể là "${topic}"`
+      : "dựa trên nội dung chuẩn của sách giáo khoa";
+
     const prompt = `Soạn giáo án tiếng Anh lớp 10 song ngữ (Anh - Việt), tập trung chuyên sâu vào phần "${focus}" của ${unit} ${topicContext}. 
-      Thời lượng: ${duration}. 
-      Yêu cầu:
-      1. Cấu trúc bài bản (Warm-up, Presentation, Practice, Production, Wrap-up).
-      2. Mọi nội dung (title, objectives, materials, activities, purpose, homework) ĐỀU PHẢI CÓ bản tiếng Anh và bản dịch tiếng Việt tương ứng.
-      3. Nếu là các kỹ năng (Nghe/Đọc/Viết/Nói), hãy chia rõ các giai đoạn Pre/While/Post.
-      4. Tự xác định mục tiêu bài học (Objectives) dựa trên Unit và Focus nếu chủ đề không được cung cấp cụ thể.`;
+Thời lượng: ${duration}. 
+Yêu cầu:
+1. Cấu trúc bài bản (Warm-up, Presentation, Practice, Production, Wrap-up).
+2. Mọi nội dung (title, objectives, materials, activities, purpose, homework) ĐỀU PHẢI CÓ bản tiếng Anh và bản dịch tiếng Việt tương ứng.
+3. Nếu là các kỹ năng (Nghe/Đọc/Viết/Nói), hãy chia rõ các giai đoạn Pre/While/Post.
+4. Tự xác định mục tiêu bài học (Objectives) dựa trên Unit và Focus nếu chủ đề không được cung cấp cụ thể.`;
 
-  const response = await fetch("/api/gemini", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    action: "lessonPlan",
-    payload: { prompt },
-  }),
-});
+    const response = await fetch("/api/gemini", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "lessonPlan",
+        payload: { prompt },
+      }),
+    });
 
-const data = await response.json();
-return data.json || null;
-
+    const data = await response.json();
+    return data.json ?? null; // (tạm thời) server trả về key "json"
   } catch (e) {
     console.error("Lesson plan error:", e);
     return null;
   }
 };
+
 
 export const generateHomework = async (unitName: string) => {
   try {
