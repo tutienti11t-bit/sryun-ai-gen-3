@@ -1,0 +1,7 @@
+{
+  "name": "Sryun AI no1 - Trợ Lý Học Tiếng Anh Lớp 10",
+  "description": "Ứng dụng học tiếng Anh thông minh dành riêng cho học sinh lớp 10, tích hợp AI để giải đáp thắc mắc, học từ vựng theo chủ đề và tham gia các trò chơi mini-game hấp dẫn.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
