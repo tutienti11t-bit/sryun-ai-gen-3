@@ -1,11 +1,6 @@
-
-import { GoogleGenAI, Type } from "@google/genai";
-
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
 export const getAITutorResponse = async (userInput: string) => {
   try {
-    const response = await ai.models.generateContent({
+    const response = await fetch("/api/gemini", {
       model: 'gemini-3-flash-preview',
       contents: userInput,
       config: {
