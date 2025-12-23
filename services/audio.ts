@@ -1,8 +1,4 @@
 
-import { GoogleGenAI, Modality } from "@google/genai";
-
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
 // BỘ NHỚ ĐỆM (CACHE) - Lưu trữ AudioBuffer để không phải gọi API lại
 const audioCache = new Map<string, AudioBuffer>();
 
@@ -85,20 +81,15 @@ export const getAIAudioBuffer = async (text: string, audioCtx: AudioContext): Pr
 
   try {
     // 2. Nếu chưa có trong cache, gọi API
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash-preview-tts",
-      contents: [{ parts: [{ text: `Say clearly: ${text}` }] }], // Prompt ngắn gọn hơn để tiết kiệm token
-      config: {
-        responseModalities: [Modality.AUDIO],
-        speechConfig: {
-          voiceConfig: {
-            prebuiltVoiceConfig: { voiceName: 'Kore' },
-          },
-        },
-      },
-    });
+   const r = await fetch("/api/tts", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ text }),
+});
 
-    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+const data = await r.json();
+const base64Audio = data.base64Audio;
+
     if (!base64Audio) return null;
 
     const audioData = decodeBase64(base64Audio);
