@@ -29,47 +29,18 @@ export const generateLessonPlan = async (topic: string, unit: string, duration: 
       3. Nếu là các kỹ năng (Nghe/Đọc/Viết/Nói), hãy chia rõ các giai đoạn Pre/While/Post.
       4. Tự xác định mục tiêu bài học (Objectives) dựa trên Unit và Focus nếu chủ đề không được cung cấp cụ thể.`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        thinkingConfig: { thinkingBudget: 0 },
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            title: { type: Type.STRING },
-            titleVi: { type: Type.STRING },
-            focus: { type: Type.STRING },
-            focusVi: { type: Type.STRING },
-            objectives: { type: Type.ARRAY, items: { type: Type.STRING } },
-            objectivesVi: { type: Type.ARRAY, items: { type: Type.STRING } },
-            materials: { type: Type.ARRAY, items: { type: Type.STRING } },
-            materialsVi: { type: Type.ARRAY, items: { type: Type.STRING } },
-            procedure: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  step: { type: Type.STRING },
-                  stepVi: { type: Type.STRING },
-                  time: { type: Type.STRING },
-                  activities: { type: Type.STRING },
-                  activitiesVi: { type: Type.STRING },
-                  purpose: { type: Type.STRING },
-                  purposeVi: { type: Type.STRING }
-                },
-                required: ["step", "stepVi", "time", "activities", "activitiesVi", "purpose", "purposeVi"]
-              }
-            },
-            homework: { type: Type.STRING },
-            homeworkVi: { type: Type.STRING }
-          },
-          required: ["title", "titleVi", "focus", "focusVi", "objectives", "objectivesVi", "materials", "materialsVi", "procedure", "homework", "homeworkVi"]
-        }
-      }
-    });
-    return JSON.parse(response.text || "null");
+  const response = await fetch("/api/gemini", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    action: "lessonPlan",
+    payload: { prompt },
+  }),
+});
+
+const data = await response.json();
+return data.json || null;
+
   } catch (e) {
     console.error("Lesson plan error:", e);
     return null;
