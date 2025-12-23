@@ -6,14 +6,6 @@ export const getAITutorResponse = async (userInput: string) => {
       body: JSON.stringify({ action: "tutor", payload: { userInput } }),
     });
 
-    const data = await response.json();
-    return data.text || "Sryun đang bận một chút, thử lại sau nhé!";
-  } catch (error) {
-    console.error("AI tutor error:", error);
-    return "Lỗi kết nối AI.";
-  }
-};
-
 
     const data = await r.json();
     return data.text || "Sryun đang bận một chút, thử lại sau nhé!";
