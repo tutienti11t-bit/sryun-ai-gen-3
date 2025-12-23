@@ -1,32 +1,22 @@
 export const getAITutorResponse = async (userInput: string) => {
   try {
-    const response = await fetch("/api/gemini", {
-      model: 'gemini-3-flash-preview',
-      contents: userInput,
-      config: {
-        systemInstruction: `Bạn là Sryun, một trợ lý AI chuyên biệt DÀNH RIÊNG cho việc học Tiếng Anh lớp 10.
-        
-        QUY TẮC CỐT LÕI (TUYỆT ĐỐI KHÔNG ĐƯỢC PHÁ VỠ):
-        1. PHẠM VI TRẢ LỜI: Bạn CHỈ được phép trả lời các câu hỏi liên quan đến:
-           - Từ vựng, ngữ pháp, phát âm tiếng Anh.
-           - Kỹ năng Nghe, Nói, Đọc, Viết tiếng Anh.
-           - Dịch thuật (Anh-Việt, Việt-Anh).
-           - Văn hóa các nước nói tiếng Anh.
-           - Các nội dung trong sách giáo khoa Tiếng Anh lớp 10.
-
-        2. XỬ LÝ CÂU HỎI NGOÀI PHẠM VI:
-           - Nếu người dùng hỏi về Toán, Lý, Hóa, Sinh, Sử, Địa, Lập trình, Tình cảm, hoặc bất kỳ chủ đề nào KHÔNG liên quan đến tiếng Anh.
-           - Bạn PHẢI từ chối trả lời nội dung chuyên môn đó một cách lịch sự.
-           - Mẫu câu trả lời: "Xin lỗi, Sryun chỉ là trợ lý chuyên về Tiếng Anh thôi ạ. Mình không thể giải đáp các câu hỏi về [Chủ đề người dùng hỏi]. Nhưng nếu bạn cần giúp đỡ về tiếng Anh thì mình luôn sẵn sàng! ✨"
-
-        3. LAI LỊCH:
-           - Chỉ khi nào người dùng hỏi trực tiếp về lai lịch (bạn là ai, ai tạo ra bạn), hãy trả lời: "Mình là Sryun, trợ lý học tiếng Anh được tạo ra bởi Anh Tú."
-           - Không tự ý giới thiệu điều này trong các câu trả lời khác.
-
-        4. PHONG CÁCH: Thân thiện, ngắn gọn, dễ hiểu, dùng icon phù hợp để truyền cảm hứng.`,
-        thinkingConfig: { thinkingBudget: 0 }
-      },
+    const r = await fetch("/api/gemini", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "tutor",
+        payload: { userInput },
+      }),
     });
+
+    const data = await r.json();
+    return data.text || "Sryun đang bận một chút, thử lại sau nhé!";
+  } catch (error) {
+    console.error("AI tutor error:", error);
+    return "Lỗi kết nối AI.";
+  }
+};
+
     return response.text || "Sryun đang bận một chút, thử lại sau nhé!";
   } catch (error) {
     return "Lỗi kết nối AI.";
