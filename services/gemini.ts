@@ -1,22 +1,52 @@
+// aiClient.ts (copy paste nguyên file)
+
+type GeminiResponse = {
+  text?: string;
+  valid?: boolean;
+  data?: any;
+  error?: string;
+};
+
+async function callGemini(action: string, payload: Record<string, any>) {
+  const res = await fetch("/api/gemini", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, payload }),
+  });
+
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`;
+    try {
+      const j = (await res.json()) as GeminiResponse;
+      msg = j.error || msg;
+    } catch {
+      try {
+        msg = (await res.text()) || msg;
+      } catch {}
+    }
+    throw new Error(msg);
+  }
+
+  return (await res.json()) as GeminiResponse;
+}
+
+// =====================
+// Tutor
+// =====================
 export const getAITutorResponse = async (userInput: string) => {
   try {
-    const response = await fetch("/api/gemini", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "tutor",
-        payload: { userInput },
-      }),
-    });
-
-    const data = await response.json();
-    return data.text || "Sryun đang bận một chút, thử lại sau nhé!";
-  } catch (error) {
-    console.error("AI tutor error:", error);
+    const r = await callGemini("tutor", { userInput });
+    return r.text || "Sryun đang bận một chút, thử lại sau nhé!";
+  } catch (e) {
+    console.error("AI tutor error:", e);
     return "Lỗi kết nối AI.";
   }
 };
 
+// =====================
+// Lesson Plan
+// (Server tự build prompt từ topic/unit/duration/focus)
+// =====================
 export const generateLessonPlan = async (
   topic: string,
   unit: string,
@@ -24,366 +54,64 @@ export const generateLessonPlan = async (
   focus: string
 ) => {
   try {
-    const topicContext = topic.trim()
-      ? `với chủ đề cụ thể là "${topic}"`
-      : "dựa trên nội dung chuẩn của sách giáo khoa";
-
-    const prompt = `Soạn giáo án tiếng Anh lớp 10 song ngữ (Anh - Việt), tập trung chuyên sâu vào phần "${focus}" của ${unit} ${topicContext}. 
-Thời lượng: ${duration}. 
-Yêu cầu:
-1. Cấu trúc bài bản (Warm-up, Presentation, Practice, Production, Wrap-up).
-2. Mọi nội dung (title, objectives, materials, activities, purpose, homework) ĐỀU PHẢI CÓ bản tiếng Anh và bản dịch tiếng Việt tương ứng.
-3. Nếu là các kỹ năng (Nghe/Đọc/Viết/Nói), hãy chia rõ các giai đoạn Pre/While/Post.
-4. Tự xác định mục tiêu bài học (Objectives) dựa trên Unit và Focus nếu chủ đề không được cung cấp cụ thể.`;
-
-    const response = await fetch("/api/gemini", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "lessonPlan",
-        payload: { prompt },
-      }),
-    });
-
-    const data = await response.json();
-    return data.json ?? null; // (tạm thời) server trả về key "json"
+    const r = await callGemini("lessonPlan", { topic, unit, duration, focus });
+    return r.data ?? null;
   } catch (e) {
     console.error("Lesson plan error:", e);
     return null;
   }
 };
 
-
+// =====================
+// Homework
+// =====================
 export const generateHomework = async (unitName: string) => {
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: `Tạo 3 bài tập về nhà ngắn cho học sinh lớp 10 đang học "${unitName}". 
-      1 bài về từ vựng (điền từ), 1 bài về ngữ pháp (chia động từ), 1 bài dịch thuật (Việt -> Anh). 
-      Yêu cầu độ khó trung bình.`,
-      config: {
-        responseMimeType: "application/json",
-        thinkingConfig: { thinkingBudget: 0 },
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              id: { type: Type.STRING },
-              type: { type: Type.STRING, description: "vocab, grammar, or translation" },
-              question: { type: Type.STRING },
-              hint: { type: Type.STRING },
-              correctAnswer: { type: Type.STRING },
-            },
-            required: ["id", "type", "question", "hint", "correctAnswer"]
-          }
-        }
-      }
-    });
-    return JSON.parse(response.text || "[]");
+    const r = await callGemini("homework", { unitName });
+    return (r.data as any[]) ?? [];
   } catch (e) {
+    console.error("Homework error:", e);
     return [];
   }
 };
 
-export const validateNameAppropriateness = async (name: string): Promise<boolean> => {
+// =====================
+// Validate Name
+// =====================
+export const validateNameAppropriateness = async (
+  name: string
+): Promise<boolean> => {
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: `Kiểm tra tên người dùng: "${name}". 
-      Quy tắc: 
-      1. CHỈ trả về "INVALID" nếu tên chứa từ ngữ thô tục, xúc phạm, nhạy cảm hoặc vi phạm thuần phong mỹ tục.
-      2. Trả về "VALID" cho mọi trường hợp khác. 
-      Chỉ trả về duy nhất một từ: VALID hoặc INVALID.`,
-      config: { thinkingConfig: { thinkingBudget: 0 } }
-    });
-    const result = response.text?.trim().toUpperCase();
-    return result === 'VALID';
-  } catch (error) {
-    return true; 
+    const r = await callGemini("validateName", { name });
+    return !!r.valid;
+  } catch (e) {
+    console.error("Validate name error:", e);
+    return true; // fallback an toàn
   }
 };
 
+// =====================
+// Quiz
+// =====================
 export const generateQuizQuestions = async (topic: string) => {
-    try {
-      const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: `Tạo 10 câu hỏi trắc nghiệm tiếng Anh lớp 10 ngắn gọn về: ${topic}. Trả về JSON thô.`,
-        config: {
-          responseMimeType: "application/json",
-          thinkingConfig: { thinkingBudget: 0 },
-          responseSchema: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                question: { type: Type.STRING },
-                options: { type: Type.ARRAY, items: { type: Type.STRING } },
-                correctAnswer: { type: Type.STRING },
-                explanation: { type: Type.STRING }
-              },
-              required: ["question", "options", "correctAnswer", "explanation"]
-            }
-          }
-        },
-      });
-      return JSON.parse(response.text || "[]");
-    } catch (error) {
-      console.error("Quiz error:", error);
-      return [];
-    }
+  try {
+    const r = await callGemini("quiz", { topic });
+    return (r.data as any[]) ?? [];
+  } catch (e) {
+    console.error("Quiz error:", e);
+    return [];
+  }
 };
 
+// =====================
+// Listening
+// =====================
 export const generateListeningExercise = async (topic: string) => {
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: `Tạo bài luyện nghe lớp 10 chủ đề: ${topic}.`,
-      config: {
-        responseMimeType: "application/json",
-        thinkingConfig: { thinkingBudget: 0 },
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            passage: { type: Type.STRING },
-            questions: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  question: { type: Type.STRING },
-                  options: { type: Type.ARRAY, items: { type: Type.STRING } },
-                  correctAnswer: { type: Type.STRING }
-                },
-                required: ["question", "options", "correctAnswer"]
-              }
-            }
-          },
-          required: ["passage", "questions"]
-        }
-      }
-    });
-    return JSON.parse(response.text || "{}");
-  } catch (error) {
-    return null;
-  }
-};
-
-export const generateReadingExercise = async (topic: string) => {
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: `Tạo bài luyện đọc tiếng Anh lớp 10 chủ đề: ${topic}.`,
-      config: {
-        responseMimeType: "application/json",
-        thinkingConfig: { thinkingBudget: 0 },
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            title: { type: Type.STRING },
-            content: { type: Type.STRING },
-            questions: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  question: { type: Type.STRING },
-                  options: { type: Type.ARRAY, items: { type: Type.STRING } },
-                  correctAnswer: { type: Type.STRING },
-                  explanation: { type: Type.STRING }
-                },
-                required: ["question", "options", "correctAnswer", "explanation"]
-              }
-            }
-          },
-          required: ["title", "content", "questions"]
-        }
-      }
-    });
-    return JSON.parse(response.text || "{}");
-  } catch (error) {
-    return null;
-  }
-};
-
-export const evaluateWriting = async (prompt: string, userText: string) => {
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
-      contents: `Chấm điểm bài viết tiếng Anh lớp 10. Đề bài: "${prompt}". Bài làm: "${userText}".
-      LƯU Ý QUAN TRỌNG: Trong phần "corrections", KHÔNG ĐƯỢC sử dụng ký hiệu LaTeX như $\\rightarrow$. Hãy mô tả lỗi bằng văn bản thuần túy.`,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            score: { type: Type.NUMBER },
-            feedback: { type: Type.STRING },
-            corrections: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  error: { type: Type.STRING },
-                  fix: { type: Type.STRING },
-                  reason: { type: Type.STRING }
-                }
-              }
-            },
-            betterVersion: { type: Type.STRING }
-          },
-          required: ["score", "feedback", "corrections", "betterVersion"]
-        }
-      }
-    });
-    return JSON.parse(response.text || "{}");
-  } catch (error) {
-    return null;
-  }
-};
-
-export const generateWritingPrompt = async (topic: string) => {
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: `Tạo 1 đề bài tập viết tiếng Anh lớp 10 ngắn về: ${topic}.`,
-      config: { thinkingConfig: { thinkingBudget: 0 } }
-    });
-    return response.text || "Hãy viết một đoạn văn ngắn về gia đình của bạn.";
-  } catch (error) {
-    return "Viết về sở thích của bạn.";
-  }
-};
-
-export const generateCrosswordData = async (topic: string) => {
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: `Tạo dữ liệu ô chữ (crossword) tiếng Anh lớp 10 về chủ đề: ${topic}. 
-      Yêu cầu: 
-      1. Khoảng 5-7 từ. 
-      2. Các từ phải có ít nhất 1 điểm giao nhau. 
-      3. Trả về tọa độ row, col (bắt đầu từ 0) sao cho các từ không bị đè lên nhau sai logic.
-      4. Kích thước grid (size) tối ưu (thường 8-10).
-      5. Quan trọng: Với mỗi từ, hãy chọn ngẫu nhiên 1 hoặc 2 vị trí index của chữ cái để hiện gợi ý sẵn cho học sinh (không chọn các index trùng nhau nếu có thể).`,
-      config: {
-        responseMimeType: "application/json",
-        thinkingConfig: { thinkingBudget: 0 },
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            size: { type: Type.NUMBER },
-            clues: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  number: { type: Type.NUMBER },
-                  direction: { type: Type.STRING, description: "across or down" },
-                  clue: { type: Type.STRING },
-                  answer: { type: Type.STRING },
-                  row: { type: Type.NUMBER },
-                  col: { type: Type.NUMBER },
-                  hintIndices: { type: Type.ARRAY, items: { type: Type.NUMBER }, description: "Các vị trí chữ cái sẽ được hiện sẵn dưới dạng gợi ý ban đầu" }
-                },
-                required: ["number", "direction", "clue", "answer", "row", "col", "hintIndices"]
-              }
-            }
-          },
-          required: ["size", "clues"]
-        }
-      }
-    });
-    return JSON.parse(response.text || "null");
+    const r = await callGemini("listening", { topic });
+    return r.data ?? null;
   } catch (e) {
-    console.error("Crossword generation error:", e);
+    console.error("Listening error:", e);
     return null;
-  }
-};
-
-export const generateSentencesForGame = async (topic: string) => { 
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: `Tạo 5 câu tiếng Anh lớp 10 liên quan đến: ${topic}. Kèm nghĩa tiếng Việt.`,
-      config: {
-        responseMimeType: "application/json",
-        thinkingConfig: { thinkingBudget: 0 },
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              sentence: { type: Type.STRING },
-              meaning: { type: Type.STRING }
-            },
-            required: ["sentence", "meaning"]
-          }
-        }
-      }
-    });
-    return JSON.parse(response.text || "[]");
-  } catch (e) {
-    return [];
-  }
-};
-
-export const solveSyllabus = async (base64Data: string, mimeType: string) => {
-  try {
-    const filePart = {
-      inlineData: {
-        mimeType: mimeType,
-        data: base64Data
-      },
-    };
-
-    // Updated prompt to be extremely explicit about solving the ENTIRE document
-    const prompt = `Bạn là Sryun - Siêu Trí Tuệ Giáo Dục. Nhiệm vụ của bạn là GIẢI TOÀN BỘ, KHÔNG BỎ SÓT BẤT KỲ CÂU NÀO trong tài liệu này.
-
-    QUY TẮC TUYỆT ĐỐI:
-    1. PHẠM VI XỬ LÝ: Quét từ đầu đến cuối tài liệu. Xử lý TẤT CẢ các trang, TẤT CẢ các bài tập (Phonetics, Vocabulary, Grammar, Reading, Writing, Word form, Rewrite sentences...).
-    2. SỐ LƯỢNG: Nếu tài liệu có 50 câu, kết quả JSON phải chứa đủ 50 câu. Không được tóm tắt hay làm mẫu vài câu.
-    3. CHI TIẾT:
-       - Question: Ghi lại đầy đủ nội dung câu hỏi (bao gồm cả 4 đáp án A,B,C,D nếu là trắc nghiệm).
-       - Answer: Đưa ra đáp án chính xác nhất.
-       - Explanation: Giải thích ngắn gọn, dễ hiểu bằng tiếng Việt (tại sao chọn đáp án đó, công thức ngữ pháp, nghĩa từ vựng...).
-    
-    Output Format: Trả về JSON theo cấu trúc đã định nghĩa.`;
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview', // Switch to Flash for speed optimization
-      contents: { parts: [filePart, { text: prompt }] },
-      config: {
-        responseMimeType: "application/json",
-        thinkingConfig: { thinkingBudget: 0 }, // Disable thinking for maximum speed
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              title: { type: Type.STRING, description: "Tên phần bài tập (VD: I. Multiple Choice - 10 questions)" },
-              type: { type: Type.STRING, description: "Loại bài tập (grammar, vocab, phonetic, reading...)" },
-              items: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    question: { type: Type.STRING },
-                    answer: { type: Type.STRING },
-                    explanation: { type: Type.STRING }
-                  },
-                  required: ["question", "answer", "explanation"]
-                }
-              }
-            },
-            required: ["title", "type", "items"]
-          }
-        }
-      }
-    });
-    return JSON.parse(response.text || "[]");
-  } catch (e) {
-    console.error("Syllabus solver error:", e);
-    return [];
   }
 };
