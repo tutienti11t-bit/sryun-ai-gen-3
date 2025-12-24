@@ -1,3 +1,4 @@
+// pages/api/gemini.ts (hoặc /api/gemini.ts tuỳ project)
 import { GoogleGenAI, Type } from "@google/genai";
 
 export default async function handler(req: any, res: any) {
@@ -16,13 +17,12 @@ export default async function handler(req: any, res: any) {
     const ai = new GoogleGenAI({ apiKey });
 
     const { action, payload } = req.body || {};
-
-    // action: "tutor" | "lessonPlan" | "homework" | "validateName" | "quiz" | "listening"
     if (!action) {
       res.status(400).json({ error: "Missing action" });
       return;
     }
 
+    // ========= TEXT ACTIONS =========
     if (action === "tutor") {
       const userInput = String(payload?.userInput ?? "");
       const r = await ai.models.generateContent({
@@ -64,18 +64,25 @@ Quy tắc:
 Chỉ trả về duy nhất một từ: VALID hoặc INVALID.`,
         config: { thinkingConfig: { thinkingBudget: 0 } },
       });
+
       const result = (r.text ?? "").trim().toUpperCase();
       res.status(200).json({ valid: result === "VALID" });
       return;
     }
 
-    // Các action JSON (giữ gần giống logic cũ)
+    // ========= JSON ACTIONS =========
+
+    // lessonPlan: hỗ trợ cả payload {topic,unit,duration,focus} và payload {prompt}
     if (action === "lessonPlan") {
-      const { topic = "", unit = "", duration = "", focus = "" } = payload || {};
+      const { topic = "", unit = "", duration = "", focus = "", prompt: promptFromClient } = payload || {};
+
       const topicContext = String(topic).trim()
         ? `với chủ đề cụ thể là "${topic}"`
         : "dựa trên nội dung chuẩn của sách giáo khoa";
-      const prompt = `Soạn giáo án tiếng Anh lớp 10 song ngữ (Anh - Việt), tập trung chuyên sâu vào phần "${focus}" của ${unit} ${topicContext}.
+
+      const prompt =
+        String(promptFromClient ?? "").trim() ||
+        `Soạn giáo án tiếng Anh lớp 10 song ngữ (Anh - Việt), tập trung chuyên sâu vào phần "${focus}" của ${unit} ${topicContext}.
 Thời lượng: ${duration}.
 Yêu cầu:
 1. Cấu trúc bài bản (Warm-up, Presentation, Practice, Production, Wrap-up).
@@ -113,15 +120,7 @@ Yêu cầu:
                     purpose: { type: Type.STRING },
                     purposeVi: { type: Type.STRING },
                   },
-                  required: [
-                    "step",
-                    "stepVi",
-                    "time",
-                    "activities",
-                    "activitiesVi",
-                    "purpose",
-                    "purposeVi",
-                  ],
+                  required: ["step", "stepVi", "time", "activities", "activitiesVi", "purpose", "purposeVi"],
                 },
               },
               homework: { type: Type.STRING },
@@ -164,7 +163,7 @@ Yêu cầu độ khó trung bình.`,
               type: Type.OBJECT,
               properties: {
                 id: { type: Type.STRING },
-                type: { type: Type.STRING },
+                type: { type: Type.STRING, description: "vocab, grammar, or translation" },
                 question: { type: Type.STRING },
                 hint: { type: Type.STRING },
                 correctAnswer: { type: Type.STRING },
@@ -211,15 +210,259 @@ Yêu cầu độ khó trung bình.`,
       const topic = String(payload?.topic ?? "");
       const r = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: `Tạo bài luyện nghe lớp 10 chủ đề: ${topic}. Trả về JSON thô.`,
-        config: { responseMimeType: "application/json", thinkingConfig: { thinkingBudget: 0 } },
+        contents: `Tạo bài luyện nghe lớp 10 chủ đề: ${topic}.`,
+        config: {
+          responseMimeType: "application/json",
+          thinkingConfig: { thinkingBudget: 0 },
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              passage: { type: Type.STRING },
+              questions: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    question: { type: Type.STRING },
+                    options: { type: Type.ARRAY, items: { type: Type.STRING } },
+                    correctAnswer: { type: Type.STRING },
+                  },
+                  required: ["question", "options", "correctAnswer"],
+                },
+              },
+            },
+            required: ["passage", "questions"],
+          },
+        },
       });
 
-      // nếu model trả JSON string
-      let data: any = null;
-      try { data = JSON.parse(r.text || "null"); } catch { data = r.text || ""; }
+      res.status(200).json({ data: JSON.parse(r.text || "null") });
+      return;
+    }
 
-      res.status(200).json({ data });
+    // ========= NEW: reading =========
+    if (action === "reading") {
+      const topic = String(payload?.topic ?? "");
+      const r = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: `Tạo bài luyện đọc tiếng Anh lớp 10 chủ đề: ${topic}.`,
+        config: {
+          responseMimeType: "application/json",
+          thinkingConfig: { thinkingBudget: 0 },
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              title: { type: Type.STRING },
+              content: { type: Type.STRING },
+              questions: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    question: { type: Type.STRING },
+                    options: { type: Type.ARRAY, items: { type: Type.STRING } },
+                    correctAnswer: { type: Type.STRING },
+                    explanation: { type: Type.STRING },
+                  },
+                  required: ["question", "options", "correctAnswer", "explanation"],
+                },
+              },
+            },
+            required: ["title", "content", "questions"],
+          },
+        },
+      });
+
+      res.status(200).json({ data: JSON.parse(r.text || "null") });
+      return;
+    }
+
+    // ========= NEW: writingPrompt =========
+    if (action === "writingPrompt") {
+      const topic = String(payload?.topic ?? "");
+      const r = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: `Tạo 1 đề bài tập viết tiếng Anh lớp 10 ngắn về: ${topic}.`,
+        config: { thinkingConfig: { thinkingBudget: 0 } },
+      });
+
+      res.status(200).json({ text: r.text ?? "" });
+      return;
+    }
+
+    // ========= NEW: evaluateWriting =========
+    if (action === "evaluateWriting") {
+      const prompt = String(payload?.prompt ?? "");
+      const userText = String(payload?.userText ?? "");
+      const r = await ai.models.generateContent({
+        model: "gemini-3-pro-preview",
+        contents: `Chấm điểm bài viết tiếng Anh lớp 10. Đề bài: "${prompt}". Bài làm: "${userText}".
+LƯU Ý QUAN TRỌNG: Trong phần "corrections", KHÔNG ĐƯỢC sử dụng ký hiệu LaTeX như $\\rightarrow$. Hãy mô tả lỗi bằng văn bản thuần túy.`,
+        config: {
+          responseMimeType: "application/json",
+          thinkingConfig: { thinkingBudget: 0 },
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              score: { type: Type.NUMBER },
+              feedback: { type: Type.STRING },
+              corrections: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    error: { type: Type.STRING },
+                    fix: { type: Type.STRING },
+                    reason: { type: Type.STRING },
+                  },
+                  required: ["error", "fix", "reason"],
+                },
+              },
+              betterVersion: { type: Type.STRING },
+            },
+            required: ["score", "feedback", "corrections", "betterVersion"],
+          },
+        },
+      });
+
+      res.status(200).json({ data: JSON.parse(r.text || "null") });
+      return;
+    }
+
+    // ========= NEW: crossword =========
+    if (action === "crossword") {
+      const topic = String(payload?.topic ?? "");
+      const r = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: `Tạo dữ liệu ô chữ (crossword) tiếng Anh lớp 10 về chủ đề: ${topic}.
+Yêu cầu:
+1. Khoảng 5-7 từ.
+2. Các từ phải có ít nhất 1 điểm giao nhau.
+3. Trả về tọa độ row, col (bắt đầu từ 0) sao cho các từ không bị đè lên nhau sai logic.
+4. Kích thước grid (size) tối ưu (thường 8-10).
+5. Quan trọng: Với mỗi từ, hãy chọn ngẫu nhiên 1 hoặc 2 vị trí index của chữ cái để hiện gợi ý sẵn cho học sinh (không chọn các index trùng nhau nếu có thể).`,
+        config: {
+          responseMimeType: "application/json",
+          thinkingConfig: { thinkingBudget: 0 },
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              size: { type: Type.NUMBER },
+              clues: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    number: { type: Type.NUMBER },
+                    direction: { type: Type.STRING, description: "across or down" },
+                    clue: { type: Type.STRING },
+                    answer: { type: Type.STRING },
+                    row: { type: Type.NUMBER },
+                    col: { type: Type.NUMBER },
+                    hintIndices: { type: Type.ARRAY, items: { type: Type.NUMBER } },
+                  },
+                  required: ["number", "direction", "clue", "answer", "row", "col", "hintIndices"],
+                },
+              },
+            },
+            required: ["size", "clues"],
+          },
+        },
+      });
+
+      res.status(200).json({ data: JSON.parse(r.text || "null") });
+      return;
+    }
+
+    // ========= NEW: sentences =========
+    if (action === "sentences") {
+      const topic = String(payload?.topic ?? "");
+      const r = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: `Tạo 5 câu tiếng Anh lớp 10 liên quan đến: ${topic}. Kèm nghĩa tiếng Việt.`,
+        config: {
+          responseMimeType: "application/json",
+          thinkingConfig: { thinkingBudget: 0 },
+          responseSchema: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                sentence: { type: Type.STRING },
+                meaning: { type: Type.STRING },
+              },
+              required: ["sentence", "meaning"],
+            },
+          },
+        },
+      });
+
+      res.status(200).json({ data: JSON.parse(r.text || "[]") });
+      return;
+    }
+
+    // ========= NEW: solveSyllabus (file base64) =========
+    if (action === "solveSyllabus") {
+      const base64Data = String(payload?.base64Data ?? "");
+      const mimeType = String(payload?.mimeType ?? "");
+
+      if (!base64Data || !mimeType) {
+        res.status(400).json({ error: "Missing base64Data or mimeType" });
+        return;
+      }
+
+      const filePart = {
+        inlineData: {
+          mimeType,
+          data: base64Data,
+        },
+      };
+
+      const prompt = `Bạn là Sryun - Siêu Trí Tuệ Giáo Dục. Nhiệm vụ của bạn là GIẢI TOÀN BỘ, KHÔNG BỎ SÓT BẤT KỲ CÂU NÀO trong tài liệu này.
+
+QUY TẮC TUYỆT ĐỐI:
+1. PHẠM VI XỬ LÝ: Quét từ đầu đến cuối tài liệu. Xử lý TẤT CẢ các trang, TẤT CẢ các bài tập (Phonetics, Vocabulary, Grammar, Reading, Writing, Word form, Rewrite sentences...).
+2. SỐ LƯỢNG: Nếu tài liệu có 50 câu, kết quả JSON phải chứa đủ 50 câu. Không được tóm tắt hay làm mẫu vài câu.
+3. CHI TIẾT:
+- Question: Ghi lại đầy đủ nội dung câu hỏi (bao gồm cả 4 đáp án A,B,C,D nếu là trắc nghiệm).
+- Answer: Đưa ra đáp án chính xác nhất.
+- Explanation: Giải thích ngắn gọn, dễ hiểu bằng tiếng Việt (tại sao chọn đáp án đó, công thức ngữ pháp, nghĩa từ vựng...).
+
+Output Format: Trả về JSON theo cấu trúc đã định nghĩa.`;
+
+      const r = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: { parts: [filePart, { text: prompt }] },
+        config: {
+          responseMimeType: "application/json",
+          thinkingConfig: { thinkingBudget: 0 },
+          responseSchema: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                title: { type: Type.STRING },
+                type: { type: Type.STRING },
+                items: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      question: { type: Type.STRING },
+                      answer: { type: Type.STRING },
+                      explanation: { type: Type.STRING },
+                    },
+                    required: ["question", "answer", "explanation"],
+                  },
+                },
+              },
+              required: ["title", "type", "items"],
+            },
+          },
+        },
+      });
+
+      res.status(200).json({ data: JSON.parse(r.text || "[]") });
       return;
     }
 
